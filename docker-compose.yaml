@@ -1,0 +1,107 @@
+version: "3.4"
+
+services:
+
+  nginx:
+    image: registry.gitlab.com/nayak-aircraft-services/pcp/nginx:local
+    depends_on:
+      - phpfpm
+    networks:
+      rentalprogramnetwork:
+        aliases:
+          - pcp-web
+    ports:
+      - target: 80
+        published: 80
+    volumes:
+      - ./src-php:/srv/app
+  
+  # this container is with xdebug, comment out this to use without xdebug (better performance)
+  phpfpm:
+    image: registry.gitlab.com/nayak-aircraft-services/pcp/php7.4-xdebug:dev-1.0.3
+    networks:
+      rentalprogramnetwork:
+        aliases:
+          - pcp-phpfpm
+    depends_on:
+      - mysql
+    volumes:
+      - ./src-php:/srv/app
+      - ./docker/php/conf.d/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+      - ./docker/php/conf.d/error_reporting.ini:/usr/local/etc/php/conf.d/error_reporting.ini
+    working_dir: /srv/app
+    command: php-fpm
+    environment:
+      - PHP_IDE_CONFIG=serverName=php-web
+    expose:
+      - 9000
+        
+  mysql:
+    image: mariadb
+    networks:
+      rentalprogramnetwork:
+        aliases:
+          - pcp_db
+    volumes:
+      - type: bind
+        source: ./db-workdir
+        target: /var/lib/mysql
+      - type: bind
+        source: ./db-start
+        target: /tmp/db-start
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+
+  # phpmyadmin
+  phpmyadmin:
+    depends_on:
+      - mysql
+    image: phpmyadmin/phpmyadmin
+    restart: always
+    ports:
+      - '8080:80'
+    environment:
+      PMA_HOST: pcp_db
+      MYSQL_ROOT_PASSWORD: example
+    networks:
+      - pcp
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    hostname: application_rmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: root
+      RABBITMQ_DEFAULT_PASS: example
+      RABBITMQ_ERLANG_COOKIE: 1ONERELANICECOOK
+    volumes:
+      - rmqconfig:/etc/rabbitmq/
+      - rmq:/var/lib/rabbitmq/
+    ports:
+      - 5672:5672
+      - 15672:15672
+    networks:
+      rentalprogramnetwork:
+        aliases:
+          - application_rmq
+
+  redis:
+    image: redis
+    networks:
+      rentalprogramnetwork:
+        aliases:
+          - redis
+    ports:
+      - target: 6379
+        published: 6379
+    restart: always
+
+
+networks:
+  rentalprogramnetwork:
+    driver: bridge
+
+volumes:
+  rmq:
+  rmqconfig:
